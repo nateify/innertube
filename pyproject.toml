@@ -1,34 +1,42 @@
-[tool.poetry]
+[project]
 name = "innertube"
-version = "2.1.19"
+version = "2.2.0"
 description = "Python Client for Google's Private InnerTube API. Works with Youtube, YouTube Music and more!"
-authors = ["Tom Bulled <26026015+tombulled@users.noreply.github.com>"]
-license = "MIT"
 readme = "README.md"
-homepage = "https://pypi.org/project/innertube/"
-repository = "https://github.com/tombulled/innertube"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Tom Bulled", email = "26026015+tombulled@users.noreply.github.com" },
+    { name = "nateify", email = "nateify@users.noreply.github.com" }
+]
 keywords = ["innertube", "youtube", "youtubei", "python", "api", "client"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+    "curl-cffi>=0.15.0",
+    "httpx2>=2.3.0",
+    "mediate>=0.1.8",
+]
 
-[tool.poetry.dependencies]
-python = "^3.8"
-httpx = "^0.23.3"
-mediate = "^0.1.2"
+[project.urls]
+Homepage = "https://pypi.org/project/innertube/"
+Repository = "https://github.com/tombulled/innertube"
 
-[tool.poetry.dev-dependencies]
-black = "^22.1.0"
-mypy = "^0.941"
-pytest = "^7.1.1"
-Flask = "^2.1.2"
+[dependency-groups]
+dev = [
+    "pytest>=7.1.1",
+    "Flask>=2.1.2",
+    "pyrefly>=1.0.0",
+]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.mypy]
+[tool.pyrefly]
 check_untyped_defs = true
 ignore_missing_imports = true
 show_error_codes = true
-warn_redundant_casts = true
-warn_unused_configs = true
-warn_unused_ignores = true
 exclude = ["examples/"]

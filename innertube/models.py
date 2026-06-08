@@ -30,6 +30,14 @@ class ClientContext:
     referer: Optional[str] = None
     locale: Optional[Locale] = None
 
+    @property
+    def impersonate(self) -> str:
+        if "IOS" in self.client_name.upper():
+            return "safari_ios"
+        if self.referer == "https://m.youtube.com/":
+            return "chrome_android"
+        return "chrome"
+
     def params(self) -> Dict[str, str]:
         return utils.filter(
             {
@@ -56,9 +64,7 @@ class ClientContext:
                 "X-YouTube-Client-Version": self.client_version,
                 "User-Agent": self.user_agent,
                 "Referer": self.referer,
-                "Accept-Language": (
-                    self.locale.accept_language() if self.locale is not None else None
-                ),
+                "Accept-Language": (self.locale.accept_language() if self.locale is not None else None),
             }
         )
 

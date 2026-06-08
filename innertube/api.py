@@ -70,21 +70,21 @@ def get_response_context(data: dict, /) -> Optional[ResponseContext]:
             version=services.get("CSI", {}).get("cver"),
         ),
         flags=ResponseContext.Flags(
-            logged_in=(value := services.get("GFEEDBACK", {}).get("logged_in"))
-            and bool(int(value)),
+            logged_in=(value := services.get("GFEEDBACK", {}).get("logged_in")) and bool(int(value)),
         ),
     )
 
 
 def error(error: dict, /) -> models.Error:
-    return models.Error(
-        code=error["code"], message=error["message"], reason=error["status"]
-    )
+    return models.Error(code=error["code"], message=error["message"], reason=error["status"])
 
 
-def contextualise(client_context: ClientContext, data: dict) -> dict:
-    data.setdefault("context", {}).setdefault("client", {}).update(
-        client_context.context()
-    )
+def contextualise(client_context: ClientContext, data: dict, visitor_data: Optional[str] = None) -> dict:
+    context_client = client_context.context()
+
+    if visitor_data is not None:
+        context_client["visitorData"] = visitor_data
+
+    data.setdefault("context", {}).setdefault("client", {}).update(context_client)
 
     return data

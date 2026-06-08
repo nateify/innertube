@@ -1,37 +1,33 @@
 import dataclasses
-from typing import List, Optional
+from typing import List, Optional, Union
 
-import httpx
 import mediate
-from httpx._types import ProxiesTypes
+from curl_cffi import requests
 
 from . import api, utils
 from .adaptor import InnerTubeAdaptor
-from .config import config
 from .enums import Endpoint
 from .locale import Locale
 from .models import ClientContext
+from .pot import PoTokenProvider
 from .protocols import Adaptor
+from .sts import StsResolver
+
+_sts_resolver = StsResolver()
 
 
 @dataclasses.dataclass
 class Client:
     adaptor: Adaptor
 
-    middleware: mediate.Middleware = dataclasses.field(
-        default_factory=mediate.Middleware, repr=False, init=False
-    )
+    middleware: mediate.Middleware = dataclasses.field(default_factory=mediate.Middleware, repr=False, init=False)
 
-    def __call__(
-        self, endpoint: str, params: Optional[dict] = None, body: Optional[dict] = None
-    ) -> dict:
+    def __call__(self, endpoint: str, params: Optional[dict] = None, body: Optional[dict] = None) -> dict:
         @self.middleware.bind
         def process(data: dict, /) -> dict:
             return data
 
-        response: dict = process(
-            self.adaptor.dispatch(endpoint, params=params, body=body)
-        )
+        response: dict = process(self.adaptor.dispatch(endpoint, params=params, body=body))
 
         response.pop("responseContext")
 
@@ -50,7 +46,9 @@ class InnerTube(Client):
         referer: Optional[str] = None,
         locale: Optional[Locale] = None,
         auto: bool = True,
-        proxies: Optional[ProxiesTypes] = None,
+        proxy: Optional[Union[str, dict]] = None,
+        use_po_token: bool = False,
+        pot_provider_url: str = "http://127.0.0.1:4416",
     ) -> None:
         if client_name is None:
             raise ValueError("Precondition failed: Missing client name")
@@ -77,10 +75,26 @@ class InnerTube(Client):
 
             context = ClientContext(**kwargs)
 
+        if proxy is not None:
+            if isinstance(proxy, str):
+                proxies = {"http": proxy, "https": proxy}
+            else:
+                proxies = proxy
+        else:
+            proxies = None
+
+        session = requests.Session(
+            impersonate=context.impersonate,
+            proxies=proxies,
+        )
+
+        pot_provider = PoTokenProvider(base_url=pot_provider_url) if use_po_token else None
+
         super().__init__(
             adaptor=InnerTubeAdaptor(
                 context=context,
-                session=httpx.Client(base_url=config.base_url, proxies=proxies),
+                session=session,
+                pot_provider=pot_provider,
             )
         )
 
@@ -90,12 +104,27 @@ class InnerTube(Client):
     def guide(self) -> dict:
         return self(Endpoint.GUIDE)
 
-    def player(self, video_id: str) -> dict:
+    def player(
+        self,
+        video_id: str,
+        *,
+        params: Optional[str] = None,
+        signature_timestamp: Optional[int] = None,
+    ) -> dict:
+        body = {"videoId": video_id}
+
+        if params is not None:
+            body["params"] = params
+
+        if signature_timestamp is None and "IOS" not in self.adaptor.context.client_name.upper():
+            signature_timestamp = _sts_resolver.get_sts(impersonate=self.adaptor.context.impersonate)
+
+        if signature_timestamp is not None:
+            body["playbackContext"] = {"contentPlaybackContext": {"signatureTimestamp": signature_timestamp}}
+
         return self(
             Endpoint.PLAYER,
-            body=dict(
-                videoId=video_id,
-            ),
+            body=body,
         )
 
     def browse(

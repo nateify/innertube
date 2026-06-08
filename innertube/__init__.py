@@ -5,4 +5,5 @@ from .config import config
 from .enums import Endpoint, Request
 from .locale import Language, Locale, Location
 from .models import ClientContext, Config, Error, ResponseContext, ResponseFingerprint
+from .pot import PoTokenProvider
 from .protocols import Adaptor
