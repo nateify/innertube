@@ -37,7 +37,7 @@ class StsResolver:
         if self._in_memory_sts is not None:
             return self._in_memory_sts
 
-        resp = requests.get("https://www.youtube.com/iframe_api", impersonate=impersonate)
+        resp = requests.get(url="https://www.youtube.com/iframe_api", impersonate=impersonate)
         resp.raise_for_status()
 
         hash_match = re.search(r"/s\\/player\\/([^/]+)\\/", resp.text)
@@ -52,7 +52,7 @@ class StsResolver:
             return self._in_memory_sts
 
         player_url = f"https://www.youtube.com/s/player/{player_hash}/player_ias.vflset/en_US/base.js"
-        js_resp = requests.get(player_url, impersonate=impersonate)
+        js_resp = requests.get(url=player_url, impersonate=impersonate)
         js_resp.raise_for_status()
 
         sts_match = re.search(r"signatureTimestamp\s*[=:]\s*(\d+)|sts\s*[=:]\s*(\d+)", js_resp.text)

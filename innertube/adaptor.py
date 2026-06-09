@@ -48,7 +48,7 @@ class InnerTubeAdaptor:
                 if po_token:
                     payload.setdefault("serviceIntegrityDimensions", {})["poToken"] = po_token
             except Exception:
-                pass
+                raise
 
         url = urllib.parse.urljoin(config.base_url, endpoint)
 

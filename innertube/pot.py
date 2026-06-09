@@ -9,11 +9,11 @@ class PoTokenProvider:
             base_url = f"http://{base_url}"
 
         self.base_url = base_url.rstrip("/")
-        self.session = session or Session
+        self.session = session or Session()
 
     def get_po_token(self, content_binding: str, innertube_context: dict) -> str:
         payload = {"content_binding": content_binding, "innertube_context": innertube_context}
-        response = self.session.post(f"{self.base_url}/get_pot", json=payload, timeout=20.0)
+        response = self.session.post(url=f"{self.base_url}/get_pot", json=payload, timeout=20.0)
         response.raise_for_status()
 
         data = response.json()
