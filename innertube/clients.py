@@ -135,11 +135,11 @@ class InnerTube(Client):
             "AGE_VERIFICATION_REQUIRED",
         )
 
-        if is_age_gated and self.adaptor.context.client_name != "WEB_EMBEDDED":
-            embedded_context = api.get_context("WEB_EMBEDDED")
-            if embedded_context:
-                self.adaptor.set_context(embedded_context)
-                return self(Endpoint.PLAYER, body=body)
+        # if is_age_gated and self.adaptor.context.client_name != "WEB_EMBEDDED":
+        #     embedded_context = api.get_context("WEB_EMBEDDED")
+        #     if embedded_context:
+        #         self.adaptor.set_context(embedded_context)
+        #         return self(Endpoint.PLAYER, body=body)
 
         is_bot_challenged = status == "LOGIN_REQUIRED" and "confirm" in playability_status.get("reason", "").lower()
 
