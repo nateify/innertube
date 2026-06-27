@@ -28,7 +28,12 @@ class InnerTubeAdaptor:
     def __repr__(self) -> str:
         return f"{type(self).__name__}(context={self.context!r})"
 
-    def _request(self, endpoint: str, params: Optional[dict] = None, body: Optional[dict] = None) -> requests.Response:
+    def set_context(self, context: ClientContext) -> None:
+        self.context = context
+        proxies = self.session.proxies
+        self.session = requests.Session(impersonate=context.impersonate, proxies=proxies)
+
+    def _request(self, endpoint: str, params: Optional[dict] = None, body: Optional[dict] = None, po_token: Optional[str] = None) -> requests.Response:
         req_params = self.context.params()
         if params:
             req_params.update(params)
@@ -36,19 +41,8 @@ class InnerTubeAdaptor:
         visitor_data = self.session.headers.get("X-Goog-Visitor-Id")
         payload = api.contextualise(self.context, body or {}, visitor_data=visitor_data)
 
-        if self.pot_provider is not None:
-            # videoId is used for content-bound tokens (Player), visitor_data used for session-bound
-            content_binding = payload.get("videoId")
-            if not content_binding:
-                content_binding = visitor_data or ""
-
-            innertube_context = payload.get("context", {})
-            try:
-                po_token = self.pot_provider.get_po_token(content_binding, innertube_context)
-                if po_token:
-                    payload.setdefault("serviceIntegrityDimensions", {})["poToken"] = po_token
-            except Exception:
-                raise
+        if po_token:
+            payload.setdefault("serviceIntegrityDimensions", {})["poToken"] = po_token
 
         url = urllib.parse.urljoin(config.base_url, endpoint)
 
@@ -60,8 +54,8 @@ class InnerTubeAdaptor:
             headers=self.context.headers(),
         )
 
-    def dispatch(self, endpoint: str, params: Optional[dict] = None, body: Optional[dict] = None) -> dict:
-        response: requests.Response = self._request(endpoint, params=params, body=body)
+    def dispatch(self, endpoint: str, params: Optional[dict] = None, body: Optional[dict] = None, po_token: Optional[str] = None) -> dict:
+        response: requests.Response = self._request(endpoint, params=params, body=body, po_token=po_token)
 
         content_type: Optional[str] = response.headers.get("Content-Type")
 
@@ -72,7 +66,6 @@ class InnerTubeAdaptor:
         response_data: dict = response.json()
 
         visitor_data: Optional[str] = response_data.get("responseContext", {}).get("visitorData")
-
         if visitor_data is not None:
             self.session.headers["X-Goog-Visitor-Id"] = visitor_data
 

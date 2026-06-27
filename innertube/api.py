@@ -87,4 +87,8 @@ def contextualise(client_context: ClientContext, data: dict, visitor_data: Optio
 
     data.setdefault("context", {}).setdefault("client", {}).update(context_client)
 
+    if "EMBEDDED" in client_context.client_name.upper():
+        referer = client_context.referer
+        data["context"]["thirdParty"] = {"embedUrl": referer}
+
     return data

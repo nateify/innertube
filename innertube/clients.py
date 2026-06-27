@@ -22,12 +22,14 @@ class Client:
 
     middleware: mediate.Middleware = dataclasses.field(default_factory=mediate.Middleware, repr=False, init=False)
 
-    def __call__(self, endpoint: str, params: Optional[dict] = None, body: Optional[dict] = None) -> dict:
+    def __call__(
+        self, endpoint: str, params: Optional[dict] = None, body: Optional[dict] = None, po_token: Optional[str] = None
+    ) -> dict:
         @self.middleware.bind
         def process(data: dict, /) -> dict:
             return data
 
-        response: dict = process(self.adaptor.dispatch(endpoint, params=params, body=body))
+        response: dict = process(self.adaptor.dispatch(endpoint, params=params, body=body, po_token=po_token))
 
         response.pop("responseContext")
 
@@ -47,7 +49,6 @@ class InnerTube(Client):
         locale: Optional[Locale] = None,
         auto: bool = True,
         proxy: Optional[Union[str, dict]] = None,
-        use_po_token: bool = False,
         pot_provider_url: str = "http://127.0.0.1:4416",
     ) -> None:
         if client_name is None:
@@ -88,7 +89,7 @@ class InnerTube(Client):
             proxies=proxies,
         )
 
-        pot_provider = PoTokenProvider(base_url=pot_provider_url) if use_po_token else None
+        pot_provider = PoTokenProvider(base_url=pot_provider_url) if pot_provider_url else None
 
         super().__init__(
             adaptor=InnerTubeAdaptor(
@@ -116,16 +117,49 @@ class InnerTube(Client):
         if params is not None:
             body["params"] = params
 
-        if signature_timestamp is None and "IOS" not in self.adaptor.context.client_name.upper():
+        needs_sts = self.adaptor.context.payload_name in ("WEB", "WEB_REMIX", "TVHTML5")
+
+        if signature_timestamp is None and needs_sts:
             signature_timestamp = _sts_resolver.get_sts(impersonate=self.adaptor.context.impersonate)
 
         if signature_timestamp is not None:
             body["playbackContext"] = {"contentPlaybackContext": {"signatureTimestamp": signature_timestamp}}
 
-        return self(
-            Endpoint.PLAYER,
-            body=body,
+        response = self(Endpoint.PLAYER, body=body)
+
+        playability_status = response.get("playabilityStatus", {})
+        status = playability_status.get("status")
+
+        is_age_gated = "confirm your age" in playability_status.get("reason", "").lower() or status in (
+            "AGE_CHECK_REQUIRED",
+            "AGE_VERIFICATION_REQUIRED",
         )
+
+        if is_age_gated and self.adaptor.context.client_name != "WEB_EMBEDDED":
+            embedded_context = api.get_context("WEB_EMBEDDED")
+            if embedded_context:
+                self.adaptor.set_context(embedded_context)
+                return self(Endpoint.PLAYER, body=body)
+
+        is_bot_challenged = status == "LOGIN_REQUIRED" and "confirm" in playability_status.get("reason", "").lower()
+
+        if is_bot_challenged and self.adaptor.pot_provider is not None:
+            visitor_data = self.adaptor.session.headers.get("X-Goog-Visitor-Id")
+
+            mock_context = {"client": self.adaptor.context.context()}
+            if visitor_data:
+                mock_context["client"]["visitorData"] = visitor_data
+
+            try:
+                po_token = self.adaptor.pot_provider.get_po_token(
+                    content_binding=video_id, innertube_context=mock_context
+                )
+                if po_token:
+                    return self(Endpoint.PLAYER, body=body, po_token=po_token)
+            except Exception:
+                pass
+
+        return response
 
     def browse(
         self,

@@ -27,15 +27,29 @@ class ClientContext:
     client_id: Optional[int] = None
     api_key: Optional[str] = None
     user_agent: Optional[str] = None
+    impersonate_target: Optional[str] = None
     referer: Optional[str] = None
     locale: Optional[Locale] = None
 
     @property
+    def payload_name(self) -> str:
+        name_upper = self.client_name.upper()
+        if "SAFARI" in name_upper:
+            return "WEB"
+        if "EMBEDDED" in name_upper:
+            return "WEB_EMBEDDED_PLAYER"
+        if name_upper == "TV":
+            return "TVHTML5"
+        if "MUSIC" in name_upper:
+            return "WEB_REMIX"
+        return self.client_name
+
+    @property
     def impersonate(self) -> str:
+        if self.impersonate_target:
+            return self.impersonate_target
         if "IOS" in self.client_name.upper():
             return "safari_ios"
-        if self.referer == "https://m.youtube.com/":
-            return "chrome_android"
         return "chrome"
 
     def params(self) -> Dict[str, str]:
@@ -49,7 +63,7 @@ class ClientContext:
     def context(self) -> Dict[str, str]:
         return utils.filter(
             {
-                "clientName": self.client_name,
+                "clientName": self.payload_name,
                 "clientVersion": self.client_version,
                 "gl": self.locale.location if self.locale is not None else None,
                 "hl": self.locale.language if self.locale is not None else None,
@@ -57,11 +71,18 @@ class ClientContext:
         )
 
     def headers(self) -> Dict[str, str]:
+        origin = "https://youtubei.googleapis.com"
+        if self.referer and "music.youtube.com" in self.referer:
+            origin = "https://music.youtube.com"
+        elif self.referer and "youtube.com" in self.referer:
+            origin = "https://www.youtube.com"
+
         return utils.filter(
             {
                 "X-Goog-Api-Format-Version": "1",
                 "X-YouTube-Client-Name": str(self.client_id),
                 "X-YouTube-Client-Version": self.client_version,
+                "Origin": origin,
                 "User-Agent": self.user_agent,
                 "Referer": self.referer,
                 "Accept-Language": (self.locale.accept_language() if self.locale is not None else None),
