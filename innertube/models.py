@@ -24,6 +24,11 @@ class Error:
 class ClientContext:
     client_name: str
     client_version: str
+    device_make: Optional[str] = None
+    device_model: Optional[str] = None
+    android_sdk_version: Optional[int] = None
+    os_name: Optional[str] = None
+    os_version: Optional[str] = None
     client_id: Optional[int] = None
     api_key: Optional[str] = None
     user_agent: Optional[str] = None
@@ -45,8 +50,8 @@ class ClientContext:
         return self.client_name
 
     @property
-    def impersonate(self) -> str:
-        if self.impersonate_target:
+    def impersonate(self) -> str | None:
+        if self.impersonate_target or self.impersonate_target is None:
             return self.impersonate_target
         if "IOS" in self.client_name.upper():
             return "safari_ios"
@@ -60,18 +65,26 @@ class ClientContext:
             }
         )
 
-    def context(self) -> Dict[str, str]:
+    def context(self) -> dict[str, int | str]:
         return utils.filter(
             {
                 "clientName": self.payload_name,
                 "clientVersion": self.client_version,
-                "gl": self.locale.location if self.locale is not None else None,
-                "hl": self.locale.language if self.locale is not None else None,
+                "deviceMake": self.device_make if self.device_make is not None else None,
+                "deviceModel": self.device_model if self.device_model is not None else None,
+                "androidSdkVersion": self.android_sdk_version if self.android_sdk_version is not None else None,
+                "osName": self.os_name if self.os_name is not None else None,
+                "osVersion": self.os_version if self.os_version is not None else None,
+                "gl": self.locale.location if self.locale is not None else "US",
+                "hl": self.locale.language if self.locale is not None else "en",
+                "userAgent": self.user_agent,
+                "timeZone":         "UTC",
+                "utcOffsetMinutes": 0,
             }
         )
 
     def headers(self) -> Dict[str, str]:
-        origin = "https://youtubei.googleapis.com"
+        origin = "https://www.youtube.com"
         if self.referer and "music.youtube.com" in self.referer:
             origin = "https://music.youtube.com"
         elif self.referer and "youtube.com" in self.referer:

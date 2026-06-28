@@ -5,13 +5,19 @@ REFERER_YOUTUBE_MUSIC: str = "https://music.youtube.com/"
 REFERER_EMBED_THIRD_PARTY: str = "https://www.reddit.com/"
 
 config: Config = Config(
-    base_url="https://youtubei.googleapis.com/youtubei/v1/",
+    base_url="https://www.youtube.com/youtubei/v1/",
     clients=[
         ClientContext(
             client_id=28,
             client_name="ANDROID_VR",
             client_version="1.65.10",
             user_agent="com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+            impersonate_target=None,
+            device_make="Oculus",
+            device_model="Quest 3",
+            android_sdk_version=32,
+            os_name="Android",
+            os_version="12L",
         ),
         ClientContext(
             client_id=5,

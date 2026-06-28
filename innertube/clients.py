@@ -1,4 +1,5 @@
 import dataclasses
+import re
 from typing import List, Optional, Union
 
 import mediate
@@ -112,18 +113,73 @@ class InnerTube(Client):
         params: Optional[str] = None,
         signature_timestamp: Optional[int] = None,
     ) -> dict:
-        body = {"videoId": video_id}
+        # Bootstrap session cookies - experimental, not required
+        # if "WEB" in self.adaptor.context.client_name.upper() and not self.adaptor.session.cookies:
+        #     bootstrap_url = f"https://www.youtube.com/watch?v={video_id}&bpctr=9999999999&has_verified=1"
+        #     try:
+        #         resp = self.adaptor.session.get(bootstrap_url, headers=self.adaptor.context.headers(), timeout=10.0)
+        #
+        #         visitor_match = re.search(r'["\']VISITOR_DATA["\']\s*:\s*["\']([^"\']+)["\']', resp.text)
+        #         if visitor_match:
+        #             visitor_data = visitor_match.group(1)
+        #             visitor_data = visitor_data.encode().decode("unicode_escape")
+        #             self.adaptor.session.headers["X-Goog-Visitor-Id"] = visitor_data
+        #     except Exception:
+        #         pass
+
+        is_embedded = self.adaptor.context.payload_name == "WEB_EMBEDDED_PLAYER"
+        encrypted_host_flags = None
+        embedded_player_context = None
+
+        if is_embedded:
+            embed_url = f"https://www.youtube.com/embed/{video_id}?html5=1"
+            try:
+                headers = self.adaptor.context.headers()
+                resp = self.adaptor.session.get(embed_url, headers=headers, timeout=10.0)
+
+                ehf_match = re.search(r'["\']encryptedHostFlags["\']\s*:\s*["\']([^"\']+)["\']', resp.text)
+                if ehf_match:
+                    encrypted_host_flags = ehf_match.group(1).encode().decode("unicode_escape")
+
+                epc_match = re.search(r'["\']embeddedPlayerEncryptedContext["\']\s*:\s*["\']([^"\']+)["\']', resp.text)
+                if epc_match:
+                    embedded_player_context = epc_match.group(1).encode().decode("unicode_escape")
+            except Exception:
+                pass
+
+        body = {
+            "videoId": video_id,
+            "contentCheckOk": True,
+            "racyCheckOk": True,
+        }
 
         if params is not None:
             body["params"] = params
 
-        needs_sts = self.adaptor.context.payload_name in ("WEB", "WEB_REMIX", "TVHTML5")
+        needs_sts = self.adaptor.context.payload_name in ("WEB", "WEB_REMIX", "TVHTML5", "WEB_EMBEDDED_PLAYER")
 
         if signature_timestamp is None and needs_sts:
             signature_timestamp = _sts_resolver.get_sts(impersonate=self.adaptor.context.impersonate)
 
+        playback_context = {"contentPlaybackContext": {"html5Preference": "HTML5_PREF_WANTS"}}
         if signature_timestamp is not None:
-            body["playbackContext"] = {"contentPlaybackContext": {"signatureTimestamp": signature_timestamp}}
+            playback_context["contentPlaybackContext"]["signatureTimestamp"] = signature_timestamp
+
+        if is_embedded:
+            if encrypted_host_flags:
+                playback_context["contentPlaybackContext"]["encryptedHostFlags"] = encrypted_host_flags
+
+            if embedded_player_context:
+                body.setdefault("context", {}).setdefault("thirdParty", {}).update(
+                    {
+                        "embeddedPlayerContext": {
+                            "embeddedPlayerEncryptedContext": embedded_player_context,
+                            "ancestorOriginsSupported": False,
+                        }
+                    }
+                )
+
+        body["playbackContext"] = playback_context
 
         response = self(Endpoint.PLAYER, body=body)
 
@@ -135,29 +191,29 @@ class InnerTube(Client):
             "AGE_VERIFICATION_REQUIRED",
         )
 
-        # if is_age_gated and self.adaptor.context.client_name != "WEB_EMBEDDED":
-        #     embedded_context = api.get_context("WEB_EMBEDDED")
-        #     if embedded_context:
-        #         self.adaptor.set_context(embedded_context)
-        #         return self(Endpoint.PLAYER, body=body)
+        if is_age_gated and self.adaptor.context.client_name != "WEB_EMBEDDED":
+            embedded_context = api.get_context("WEB_EMBEDDED")
+            if embedded_context:
+                self.adaptor.set_context(embedded_context)
+                return self.player(video_id, params=params, signature_timestamp=signature_timestamp)
 
-        is_bot_challenged = status == "LOGIN_REQUIRED" and "confirm" in playability_status.get("reason", "").lower()
-
-        if is_bot_challenged and self.adaptor.pot_provider is not None:
-            visitor_data = self.adaptor.session.headers.get("X-Goog-Visitor-Id")
-
-            mock_context = {"client": self.adaptor.context.context()}
-            if visitor_data:
-                mock_context["client"]["visitorData"] = visitor_data
-
-            try:
-                po_token = self.adaptor.pot_provider.get_po_token(
-                    content_binding=video_id, innertube_context=mock_context
-                )
-                if po_token:
-                    return self(Endpoint.PLAYER, body=body, po_token=po_token)
-            except Exception:
-                pass
+        # is_bot_challenged = status == "LOGIN_REQUIRED" and "confirm" in playability_status.get("reason", "").lower()
+        #
+        # if is_bot_challenged and self.adaptor.pot_provider is not None:
+        #     visitor_data = self.adaptor.session.headers.get("X-Goog-Visitor-Id")
+        #
+        #     mock_context = {"client": self.adaptor.context.context()}
+        #     if visitor_data:
+        #         mock_context["client"]["visitorData"] = visitor_data
+        #
+        #     try:
+        #         po_token = self.adaptor.pot_provider.get_po_token(
+        #             content_binding=video_id, innertube_context=mock_context
+        #         )
+        #         if po_token:
+        #             return self(Endpoint.PLAYER, body=body, po_token=po_token)
+        #     except Exception:
+        #         pass
 
         return response
 
